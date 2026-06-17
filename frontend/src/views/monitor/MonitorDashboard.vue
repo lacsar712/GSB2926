@@ -72,9 +72,14 @@
     <div class="table-card fade-in-up">
       <div class="table-header">
         <h4>最近运行记录</h4>
-        <el-select v-model="filterPipeline" placeholder="筛选生产线" clearable size="small" style="width: 200px" @change="loadRuns">
-          <el-option v-for="p in pipelineStats" :key="p.id" :label="p.name" :value="p.id" />
-        </el-select>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <el-select v-model="filterPipeline" placeholder="筛选生产线" clearable size="small" style="width: 200px" @change="loadRuns">
+            <el-option v-for="p in pipelineStats" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+          <el-button type="primary" size="small" @click="triggerDialogVisible = true">
+            <el-icon><VideoPlay /></el-icon>手动触发
+          </el-button>
+        </div>
       </div>
       <el-table :data="recentRuns" stripe v-loading="loading" style="width: 100%">
         <el-table-column prop="pipeline_name" label="生产线" min-width="160" />
@@ -112,6 +117,20 @@
         </el-table-column>
       </el-table>
     </div>
+
+    <el-dialog v-model="triggerDialogVisible" title="手动触发运行" width="420px" :close-on-click-modal="false">
+      <el-form label-width="80px">
+        <el-form-item label="生产线">
+          <el-select v-model="triggerPipelineId" placeholder="请选择生产线" style="width: 100%">
+            <el-option v-for="p in pipelineStats" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="triggerDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="triggerLoading" @click="handleTrigger">确认触发</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -120,6 +139,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import api from '@/utils/request'
 import dayjs from 'dayjs'
 import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const overview = ref({ totalPipelines: 0, runningPipelines: 0, totalRuns: 0, failedRuns: 0 })
@@ -128,6 +148,9 @@ const pipelineStats = ref([])
 const filterPipeline = ref('')
 const throughputChart = ref(null)
 const statusChart = ref(null)
+const triggerDialogVisible = ref(false)
+const triggerPipelineId = ref('')
+const triggerLoading = ref(false)
 
 const runStatusMap = { running: '运行中', completed: '已完成', failed: '失败', cancelled: '已取消' }
 const formatDate = (d) => d ? dayjs(d).format('MM-DD HH:mm') : '-'
@@ -189,6 +212,25 @@ const initCharts = (stats, runs) => {
         emphasis: { itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.3)' } }
       }]
     })
+  }
+}
+
+const handleTrigger = async () => {
+  if (!triggerPipelineId.value) {
+    ElMessage.warning('请选择生产线')
+    return
+  }
+  triggerLoading.value = true
+  try {
+    await api.post('/monitor/manual-trigger', { pipeline_id: triggerPipelineId.value })
+    ElMessage.success('触发成功')
+    triggerDialogVisible.value = false
+    triggerPipelineId.value = ''
+    await loadOverview()
+  } catch {
+    ElMessage.error('触发失败')
+  } finally {
+    triggerLoading.value = false
   }
 }
 

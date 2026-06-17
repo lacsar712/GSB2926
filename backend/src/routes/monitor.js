@@ -89,4 +89,26 @@ router.get('/pipeline/:pipelineId/flow', async (req, res) => {
     }
 });
 
+router.post('/manual-trigger', async (req, res) => {
+    try {
+        const { pipeline_id } = req.body;
+        if (!pipeline_id) return res.status(400).json({ success: false, message: '缺少 pipeline_id 参数' });
+        const pipelines = await db.query('SELECT id FROM pipeline WHERE id = ?', [pipeline_id]);
+        if (pipelines.length === 0) return res.status(404).json({ success: false, message: '生产线不存在' });
+        const now = new Date();
+        const result = await db.query(
+            'INSERT INTO pipeline_run (pipeline_id, status, start_time, end_time, total_input, total_output, error_count) VALUES (?, ?, ?, ?, 0, 0, 0)',
+            [pipeline_id, 'completed', now, now]
+        );
+        const rows = await db.query(
+            'SELECT r.*, p.name as pipeline_name FROM pipeline_run r LEFT JOIN pipeline p ON r.pipeline_id = p.id WHERE r.id = ?',
+            [result.insertId]
+        );
+        res.json({ success: true, data: rows[0] });
+    } catch (error) {
+        logger.error('Manual trigger error:', { message: error.message });
+        res.status(500).json({ success: false, message: '手动触发失败' });
+    }
+});
+
 module.exports = router;
