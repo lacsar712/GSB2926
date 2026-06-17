@@ -76,6 +76,33 @@ router.get('/overview', async (_req, res) => {
     }
 });
 
+// 手动触发运行
+router.post('/runs/trigger', async (req, res) => {
+    try {
+        const { pipelineId } = req.body;
+        if (!pipelineId) {
+            return res.status(400).json({ success: false, message: '请选择生产线' });
+        }
+        const pipeline = await db.query('SELECT id, name FROM pipeline WHERE id = ?', [pipelineId]);
+        if (pipeline.length === 0) {
+            return res.status(404).json({ success: false, message: '生产线不存在' });
+        }
+        const now = new Date();
+        const result = await db.query(
+            'INSERT INTO pipeline_run (pipeline_id, status, start_time, end_time, total_input, total_output, error_count) VALUES (?, ?, ?, ?, 0, 0, 0)',
+            [pipelineId, 'completed', now, now]
+        );
+        const newRun = await db.query(
+            'SELECT r.*, p.name as pipeline_name FROM pipeline_run r LEFT JOIN pipeline p ON r.pipeline_id = p.id WHERE r.id = ?',
+            [result.insertId]
+        );
+        res.json({ success: true, data: newRun[0] });
+    } catch (error) {
+        logger.error('Trigger run error:', { message: error.message });
+        res.status(500).json({ success: false, message: '触发运行失败' });
+    }
+});
+
 // 获取生产线编排数据（用于监控可视化）
 router.get('/pipeline/:pipelineId/flow', async (req, res) => {
     try {

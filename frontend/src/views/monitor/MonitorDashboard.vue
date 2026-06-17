@@ -72,9 +72,18 @@
     <div class="table-card fade-in-up">
       <div class="table-header">
         <h4>最近运行记录</h4>
-        <el-select v-model="filterPipeline" placeholder="筛选生产线" clearable size="small" style="width: 200px" @change="loadRuns">
-          <el-option v-for="p in pipelineStats" :key="p.id" :label="p.name" :value="p.id" />
-        </el-select>
+        <div class="header-actions">
+          <el-select v-model="triggerPipelineId" placeholder="选择生产线" size="small" style="width: 180px; margin-right: 8px;">
+            <el-option v-for="p in pipelineStats" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+          <el-button type="primary" size="small" :disabled="!triggerPipelineId" :loading="triggerLoading" @click="handleTriggerRun">
+            <el-icon><VideoPlay /></el-icon>手动触发
+          </el-button>
+          <el-divider direction="vertical" style="margin: 0 12px;" />
+          <el-select v-model="filterPipeline" placeholder="筛选生产线" clearable size="small" style="width: 200px" @change="loadRuns">
+            <el-option v-for="p in pipelineStats" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </div>
       </div>
       <el-table :data="recentRuns" stripe v-loading="loading" style="width: 100%">
         <el-table-column prop="pipeline_name" label="生产线" min-width="160" />
@@ -117,11 +126,14 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import api from '@/utils/request'
 import dayjs from 'dayjs'
 import * as echarts from 'echarts'
 
 const loading = ref(false)
+const triggerLoading = ref(false)
+const triggerPipelineId = ref('')
 const overview = ref({ totalPipelines: 0, runningPipelines: 0, totalRuns: 0, failedRuns: 0 })
 const recentRuns = ref([])
 const pipelineStats = ref([])
@@ -156,6 +168,25 @@ const loadRuns = async () => {
     const res = await api.get('/monitor/runs', { params })
     recentRuns.value = res.data
   } catch { /* handled */ }
+}
+
+const handleTriggerRun = async () => {
+  if (!triggerPipelineId.value) {
+    ElMessage.warning('请先选择生产线')
+    return
+  }
+  triggerLoading.value = true
+  try {
+    await api.post('/monitor/runs/trigger', { pipelineId: triggerPipelineId.value })
+    ElMessage.success('手动触发成功')
+    triggerPipelineId.value = ''
+    await loadOverview()
+    if (filterPipeline.value) {
+      await loadRuns()
+    }
+  } catch { /* handled */ } finally {
+    triggerLoading.value = false
+  }
 }
 
 const initCharts = (stats, runs) => {
@@ -213,5 +244,9 @@ onMounted(loadOverview)
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
 }
 </style>
