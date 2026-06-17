@@ -21,6 +21,33 @@ router.get('/runs', async (req, res) => {
     }
 });
 
+// 手动触发运行
+router.post('/runs/trigger', async (req, res) => {
+    try {
+        const { pipelineId } = req.body;
+        if (!pipelineId) return res.status(400).json({ success: false, message: '生产线ID不能为空' });
+
+        const pipelines = await db.query('SELECT id, name FROM pipeline WHERE id = ?', [pipelineId]);
+        if (pipelines.length === 0) return res.status(404).json({ success: false, message: '生产线不存在' });
+
+        const now = new Date();
+        const result = await db.query(
+            'INSERT INTO pipeline_run (pipeline_id, status, total_input, total_output, error_count, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [pipelineId, 'completed', 0, 0, 0, now, now]
+        );
+
+        const newRun = await db.query(
+            'SELECT r.*, p.name as pipeline_name FROM pipeline_run r LEFT JOIN pipeline p ON r.pipeline_id = p.id WHERE r.id = ?',
+            [result.insertId]
+        );
+
+        res.json({ success: true, data: newRun[0], message: '触发成功' });
+    } catch (error) {
+        logger.error('Trigger run error:', { message: error.message });
+        res.status(500).json({ success: false, message: '手动触发失败' });
+    }
+});
+
 // 获取单次运行详情
 router.get('/runs/:runId', async (req, res) => {
     try {
